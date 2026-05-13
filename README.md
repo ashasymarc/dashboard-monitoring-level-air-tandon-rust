@@ -41,6 +41,9 @@ Program ini memiliki beberapa fitur utama, yaitu:
 - Alarm overflow saat air melebihi batas aman.
 - Visualisasi level air dalam bentuk bar terminal.
 - Ringkasan akhir hasil monitoring.
+- Mode input manual.
+- Mode simulasi real-time terbatas.
+- Pembacaan sensor random otomatis setiap 1 detik.
 - Implementasi konsep OOP menggunakan `struct` dan `impl`.
 
 ## Aturan Status Level Air
@@ -70,6 +73,12 @@ Alur kerja sistem adalah sebagai berikut:
 12. Program mengatur pompa dan alarm.
 13. Program menampilkan dashboard monitoring.
 14. Setelah semua data diproses, program menampilkan ringkasan akhir.
+
+## Mode Simulasi Real-Time Terbatas
+
+Program memiliki mode simulasi real-time terbatas untuk mensimulasikan pembacaan sensor level air secara berkala. Pada mode ini, user memasukkan jumlah pembacaan sensor, kemudian program menghasilkan data level air secara acak setiap satu detik.
+
+Batas jumlah simulasi digunakan agar proses demo, pengujian, dan analisis hasil dapat dilakukan dengan jelas.
 
 ## Konsep OOP
 
