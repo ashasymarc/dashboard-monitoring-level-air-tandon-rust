@@ -1,4 +1,7 @@
+use rand::Rng;
 use std::io;
+use std::thread;
+use std::time::Duration;
 
 struct Sensor {
     name: String,
@@ -85,15 +88,25 @@ impl MonitoringSystem {
     fn add_data(&mut self, level: f32) {
         self.sensor.read_value(level);
         let calibrated = self.sensor.calibrated_value();
-        self.data.push(calibrated);
+
+        let final_value = if calibrated > 100.0 {
+            100.0
+        } else if calibrated < 0.0 {
+            0.0
+        } else {
+            calibrated
+        };
+
+        self.data.push(final_value);
     }
 
     fn moving_average(&self) -> f32 {
         let sum: f32 = self.data.iter().sum();
         sum / self.data.len() as f32
     }
+
     fn data_count(&self) -> usize {
-    self.data.len()
+        self.data.len()
     }
 }
 
@@ -120,11 +133,42 @@ fn display_tank(level: f32) -> String {
     format!("[{}{}] {:.2}%", filled, empty, level)
 }
 
-fn main() {
-    let sensor = Sensor::new(String::from("Ultrasonic Level Sensor"), 1.0);
-    let controller = Controller::new();
-    let mut system = MonitoringSystem::new(sensor, controller);
+fn display_dashboard(system: &MonitoringSystem, calibrated: f32, average: f32) {
+    println!("========================================");
+    println!(" DASHBOARD MONITORING LEVEL AIR TANDON ");
+    println!("========================================");
+    println!("Sensor              : {}", system.sensor.name);
+    println!("Level Aktual        : {:.2}%", system.sensor.value);
+    println!("Level Terkalibrasi  : {:.2}%", calibrated);
+    println!("Moving Average      : {:.2}%", average);
+    println!("Status Tandon       : {}", get_status(average));
+    println!("Visual Tandon       : {}", display_tank(average));
+    println!("Pompa               : {}", system.controller.pump_status());
+    println!("Alarm               : {}", system.controller.alarm_status());
+    println!("========================================");
+}
 
+fn display_summary(system: &mut MonitoringSystem) {
+    if system.data_count() > 0 {
+        let final_average = system.moving_average();
+        system.controller.control(final_average);
+
+        println!("\n========================================");
+        println!(" RINGKASAN AKHIR MONITORING ");
+        println!("========================================");
+        println!("Jumlah Data Valid   : {}", system.data_count());
+        println!("Rata-rata Level Air : {:.2}%", final_average);
+        println!("Status Akhir        : {}", get_status(final_average));
+        println!("Visual Tandon       : {}", display_tank(final_average));
+        println!("Pompa Akhir         : {}", system.controller.pump_status());
+        println!("Alarm Akhir         : {}", system.controller.alarm_status());
+        println!("========================================");
+    } else {
+        println!("Tidak ada data valid yang diproses.");
+    }
+}
+
+fn input_manual(system: &mut MonitoringSystem) {
     println!("Masukkan jumlah data pembacaan sensor:");
 
     let mut jumlah_input = String::new();
@@ -163,35 +207,74 @@ fn main() {
         let average = system.moving_average();
 
         system.controller.control(average);
+        display_dashboard(system, calibrated, average);
+    }
+}
 
-        println!("========================================");
-        println!(" DASHBOARD MONITORING LEVEL AIR TANDON ");
-        println!("========================================");
-        println!("Sensor              : {}", system.sensor.name);
-        println!("Level Aktual        : {:.2}%", system.sensor.value);
-        println!("Level Terkalibrasi  : {:.2}%", calibrated);
-        println!("Moving Average      : {:.2}%", average);
-        println!("Status Tandon       : {}", get_status(average));
-        println!("Visual Tandon       : {}", display_tank(average));
-                println!("Pompa               : {}", system.controller.pump_status());
-        println!("Alarm               : {}", system.controller.alarm_status());
+fn simulasi_realtime(system: &mut MonitoringSystem) {
+    println!("Masukkan jumlah simulasi pembacaan sensor:");
+
+    let mut jumlah_input = String::new();
+
+    io::stdin()
+        .read_line(&mut jumlah_input)
+        .expect("Gagal membaca input");
+
+    let jumlah_data: usize = jumlah_input
+        .trim()
+        .parse()
+        .expect("Input jumlah data harus berupa angka");
+
+    let mut rng = rand::thread_rng();
+
+    println!("\nSimulasi real-time dimulai...");
+    println!("Data sensor akan dibuat otomatis setiap 1 detik.\n");
+
+    for i in 1..=jumlah_data {
+        let simulated_level: f32 = rng.gen_range(0.0..=100.0);
+
+        println!("\nPembacaan sensor ke-{}", i);
+        println!("Data random sensor  : {:.2}%", simulated_level);
+
+        system.add_data(simulated_level);
+
+        let calibrated = system.sensor.calibrated_value();
+        let average = system.moving_average();
+
+        system.controller.control(average);
+        display_dashboard(system, calibrated, average);
+
+        thread::sleep(Duration::from_secs(1));
+    }
+}
+
+fn main() {
+    let sensor = Sensor::new(String::from("Ultrasonic Level Sensor"), 1.0);
+    let controller = Controller::new();
+    let mut system = MonitoringSystem::new(sensor, controller);
+
+    println!("========================================");
+    println!(" SISTEM MONITORING LEVEL AIR TANDON ");
+    println!("========================================");
+    println!("Pilih mode program:");
+    println!("1. Input manual");
+    println!("2. Simulasi real-time random");
+    println!("Masukkan pilihan:");
+
+    let mut pilihan = String::new();
+
+    io::stdin()
+        .read_line(&mut pilihan)
+        .expect("Gagal membaca input");
+
+    match pilihan.trim() {
+        "1" => input_manual(&mut system),
+        "2" => simulasi_realtime(&mut system),
+        _ => {
+            println!("Pilihan tidak valid.");
+            return;
+        }
     }
 
-    if system.data_count() > 0 {
-        let final_average = system.moving_average();
-        system.controller.control(final_average);
-
-        println!("\n========================================");
-        println!(" RINGKASAN AKHIR MONITORING ");
-        println!("========================================");
-        println!("Jumlah Data Valid   : {}", system.data_count());
-        println!("Rata-rata Level Air : {:.2}%", final_average);
-        println!("Status Akhir        : {}", get_status(final_average));
-        println!("Visual Tandon       : {}", display_tank(final_average));
-        println!("Pompa Akhir         : {}", system.controller.pump_status());
-        println!("Alarm Akhir         : {}", system.controller.alarm_status());
-        println!("========================================");
-    } else {
-        println!("Tidak ada data valid yang diproses.");
-    }
+    display_summary(&mut system);
 }
