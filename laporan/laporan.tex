@@ -9,6 +9,7 @@
 \usepackage{xcolor}
 \usepackage{array}
 \usepackage{longtable}
+\usepackage{amsmath}
 
 \geometry{
     left=3cm,
@@ -57,15 +58,15 @@
 
 Air merupakan kebutuhan penting dalam operasional gedung. Pada gedung bertingkat, air biasanya disimpan di dalam tandon sebelum didistribusikan ke berbagai bagian gedung. Level air pada tandon perlu dipantau agar tidak terlalu rendah maupun terlalu penuh.
 
-Jika level air terlalu rendah, distribusi air dapat terganggu. Sebaliknya, jika level air terlalu tinggi, tandon dapat mengalami overflow atau luapan air. Oleh karena itu, diperlukan sistem monitoring level air yang mampu membaca level air, menentukan kondisi tandon, serta mengontrol pompa dan alarm secara otomatis.
+Jika level air terlalu rendah, distribusi air dapat terganggu karena jumlah air di dalam tandon tidak mencukupi. Sebaliknya, jika level air terlalu tinggi, tandon dapat mengalami overflow atau luapan air. Oleh karena itu, diperlukan sistem monitoring level air yang mampu membaca level air, menentukan kondisi tandon, serta mengontrol pompa dan alarm secara otomatis.
 
-Project ini dibuat dalam bentuk aplikasi terminal berbasis bahasa pemrograman Rust. Sistem ini mensimulasikan pembacaan level air tandon, melakukan validasi data, kalibrasi sederhana, perhitungan moving average, serta pengambilan keputusan untuk mengatur pompa dan alarm.
+Project ini dibuat dalam bentuk aplikasi terminal berbasis bahasa pemrograman Rust. Sistem ini mensimulasikan pembacaan level air tandon secara berulang, melakukan validasi data, kalibrasi sederhana, perhitungan sliding moving average 3 data terakhir, serta pengambilan keputusan untuk mengatur pompa dan alarm.
 
 \section{Studi Kasus Instrumentasi}
 
 Studi kasus yang digunakan pada project ini adalah sistem monitoring level air pada tandon gedung. Sensor yang digunakan disimulasikan sebagai sensor level air ultrasonik. Sensor memberikan data berupa persentase level air dari 0\% sampai 100\%.
 
-Sistem akan menentukan status tandon berdasarkan nilai level air. Ketika level air rendah, pompa akan menyala. Ketika level air berada pada kondisi normal, pompa dan alarm akan mati. Ketika level air hampir penuh, sistem memberikan status hampir penuh. Ketika level air melebihi batas aman, sistem akan memberikan peringatan overflow dan menyalakan alarm.
+Sistem akan menentukan status tandon berdasarkan hasil sliding moving average. Ketika level air rendah, pompa akan menyala. Ketika level air berada pada kondisi normal, pompa dan alarm akan mati. Ketika level air hampir penuh, sistem memberikan status hampir penuh. Ketika level air melebihi batas aman, sistem akan memberikan peringatan overflow dan menyalakan alarm.
 
 \subsection{Aturan Status Level Air}
 
@@ -80,7 +81,7 @@ Sistem akan menentukan status tandon berdasarkan nilai level air. Ketika level a
 \hline
 81--95\% & Hampir Penuh & OFF & OFF \\
 \hline
-96--100\% & Overflow Warning & OFF & ON \\
+$>$95\% & Overflow Warning & OFF & ON \\
 \hline
 \end{tabular}
 \end{center}
@@ -94,17 +95,18 @@ Algoritma sistem monitoring level air tandon adalah sebagai berikut:
 \begin{enumerate}
     \item Program dimulai.
     \item Sistem menginisialisasi objek \textit{Sensor}, \textit{Controller}, dan \textit{MonitoringSystem}.
-    \item User memilih mode program, yaitu input manual atau simulasi real-time terbatas.
-    \item Jika memilih input manual, user memasukkan jumlah data dan nilai level air secara manual.
-    \item Jika memilih simulasi real-time terbatas, program menghasilkan data level air secara acak setiap satu detik.
+    \item User memasukkan nilai level air dalam persen.
     \item Program memvalidasi data agar berada pada rentang 0 sampai 100 persen.
-    \item Program melakukan kalibrasi sensor dengan menambahkan nilai offset.
+    \item Jika data tidak valid, program menampilkan pesan error dan meminta input berikutnya.
+    \item Jika data valid, program melakukan kalibrasi sensor dengan menambahkan nilai offset.
     \item Data hasil kalibrasi disimpan ke dalam vector.
-    \item Program menghitung moving average dari seluruh data valid.
-    \item Program menentukan status tandon berdasarkan moving average.
+    \item Program menghitung sliding moving average dari 3 data terakhir.
+    \item Program menentukan status tandon berdasarkan hasil sliding moving average.
     \item Program mengatur status pompa dan alarm.
     \item Program menampilkan dashboard monitoring.
-    \item Setelah semua data selesai diproses, program menampilkan ringkasan akhir.
+    \item Program kembali meminta input level air berikutnya.
+    \item Jika user mengetik \texttt{q}, \texttt{exit}, atau \texttt{stop}, program berhenti menerima input.
+    \item Program menampilkan ringkasan akhir monitoring.
     \item Program selesai.
 \end{enumerate}
 
@@ -114,7 +116,7 @@ Flowchart sistem monitoring level air tandon ditunjukkan pada Gambar \ref{fig:fl
 
 \begin{figure}[H]
     \centering
-    \includegraphics[width=0.85\textwidth]{../flowchart/flowchart_sistem.png}
+    \includegraphics[width=0.85\textwidth]{../flowchart/flowchat_sistem.png}
     \caption{Flowchart Sistem Monitoring Level Air Tandon}
     \label{fig:flowchart}
 \end{figure}
@@ -127,14 +129,28 @@ Program dibuat menggunakan bahasa pemrograman Rust. Program ini berbasis termina
 cargo run
 \end{lstlisting}
 
-Program memiliki dua mode utama, yaitu:
+Program menerima input berupa nilai level air tandon dalam satuan persen secara berulang. Setiap data yang dimasukkan akan divalidasi agar berada pada rentang 0 sampai 100 persen. Data yang valid akan dikalibrasi, disimpan ke dalam vector, kemudian digunakan untuk menghitung sliding moving average dari 3 data terakhir.
+
+Program akan terus menerima input sampai user mengetik \texttt{q}, \texttt{exit}, atau \texttt{stop}. Setelah program dihentikan, sistem akan menampilkan ringkasan akhir hasil monitoring.
+
+Hasil sliding moving average digunakan sebagai dasar pengambilan keputusan untuk menentukan status tandon, mengatur pompa, dan mengatur alarm.
+
+\subsection{Fitur Program}
+
+Fitur utama program adalah sebagai berikut:
 
 \begin{enumerate}
-    \item \textbf{Input Manual}, yaitu user memasukkan data level air satu per satu.
-    \item \textbf{Simulasi Real-Time Terbatas}, yaitu program menghasilkan data level air secara acak setiap satu detik.
+    \item Input level air tandon dalam persen secara berulang.
+    \item Program berhenti ketika user mengetik \texttt{q}, \texttt{exit}, atau \texttt{stop}.
+    \item Validasi input agar hanya menerima data 0 sampai 100 persen.
+    \item Kalibrasi sensor sederhana menggunakan offset.
+    \item Perhitungan sliding moving average dari 3 data terakhir.
+    \item Penentuan status tandon secara otomatis.
+    \item Kontrol pompa otomatis saat air rendah.
+    \item Alarm overflow saat air melebihi batas aman.
+    \item Visualisasi level air dalam bentuk bar terminal.
+    \item Ringkasan akhir hasil monitoring.
 \end{enumerate}
-
-Mode simulasi real-time terbatas digunakan agar sistem terlihat seperti membaca sensor secara berkala. Batas jumlah simulasi diberikan agar demo dan analisis hasil pengujian dapat dilakukan dengan jelas.
 
 \section{Konsep OOP}
 
@@ -171,7 +187,7 @@ struct Controller {
 }
 \end{lstlisting}
 
-Jika level air rendah, pompa akan menyala. Jika level air melebihi 95\%, alarm akan menyala sebagai peringatan overflow.
+Controller memiliki method \texttt{control()} yang digunakan untuk menentukan status pompa dan alarm berdasarkan nilai sliding moving average. Jika level air rendah, pompa akan menyala. Jika level air melebihi 95\%, alarm akan menyala sebagai peringatan overflow.
 
 \subsection{Struct MonitoringSystem}
 
@@ -185,29 +201,43 @@ struct MonitoringSystem {
 }
 \end{lstlisting}
 
-Vector \texttt{data} digunakan untuk menyimpan data level air yang telah dikalibrasi. Data tersebut kemudian digunakan untuk menghitung moving average.
+Vector \texttt{data} digunakan untuk menyimpan data level air yang telah dikalibrasi. Data tersebut kemudian digunakan untuk menghitung sliding moving average 3 data terakhir.
 
 \section{Implementasi Komputasi Numerik}
 
-Komputasi numerik yang digunakan pada project ini adalah \textbf{moving average}. Moving average digunakan untuk menghitung rata-rata data level air yang telah dikalibrasi.
+Komputasi numerik yang digunakan pada project ini adalah \textbf{sliding moving average} dengan window 3 data terakhir. Metode ini digunakan untuk menghitung rata-rata dari maksimal tiga pembacaan sensor terbaru.
 
-Rumus moving average adalah:
+Sliding moving average digunakan agar pembacaan sensor lebih stabil terhadap noise, tetapi tetap responsif terhadap perubahan level air. Jika hanya menggunakan satu data terakhir, status sistem dapat berubah terlalu cepat akibat fluktuasi sesaat. Sebaliknya, jika menggunakan semua data sejak awal, data lama dapat terlalu memengaruhi hasil perhitungan.
 
-\[
-\text{Moving Average} = \frac{\text{Jumlah seluruh data}}{\text{Banyak data}}
-\]
-
-Contoh:
+Rumus sliding moving average adalah:
 
 \[
-\text{Data} = 11, 51, 91
+SMA = \frac{\text{Jumlah data pada window}}{\text{Jumlah data dalam window}}
+\]
+
+Contoh data input:
+
+\[
+10, 50, 90, 98
+\]
+
+Dengan offset kalibrasi sebesar 1.0, data terkalibrasi menjadi:
+
+\[
+11, 51, 91, 99
+\]
+
+Karena window yang digunakan adalah 3 data terakhir, maka data yang dihitung adalah:
+
+\[
+51, 91, 99
 \]
 
 \[
-\text{Moving Average} = \frac{11 + 51 + 91}{3} = 51
+SMA = \frac{51 + 91 + 99}{3} = 80.33
 \]
 
-Dengan menggunakan moving average, hasil monitoring menjadi lebih stabil karena tidak hanya bergantung pada satu data sensor sesaat.
+Jadi nilai sliding moving average dari tiga data terakhir adalah 80.33\%.
 
 \section{Kalibrasi Sensor}
 
@@ -229,16 +259,27 @@ Jadi jika level aktual adalah 50\%, maka level terkalibrasi menjadi 51\%.
 
 \section{Hasil Pengujian}
 
-Pengujian dilakukan dengan menjalankan program menggunakan mode input manual dan mode simulasi real-time terbatas.
+Pengujian dilakukan dengan menjalankan program menggunakan input manual beberapa data level air secara berulang.
 
-\subsection{Pengujian Input Manual}
+\subsection{Pengujian Input Manual Berulang}
 
 Contoh input manual:
 
 \begin{lstlisting}
-Pilihan mode: 1
-Jumlah data: 3
-Data level air: 10, 50, 90
+Masukkan level air tandon:
+10
+
+Masukkan level air tandon:
+50
+
+Masukkan level air tandon:
+90
+
+Masukkan level air tandon:
+98
+
+Masukkan level air tandon:
+q
 \end{lstlisting}
 
 Hasil kalibrasi:
@@ -254,20 +295,51 @@ Hasil kalibrasi:
 \hline
 3 & 90\% & 91\% \\
 \hline
+4 & 98\% & 99\% \\
+\hline
 \end{tabular}
 \end{center}
 
-Moving average akhir:
+Sliding moving average akhir:
 
 \[
-\frac{11 + 51 + 91}{3} = 51
+\frac{51 + 91 + 99}{3} = 80.33
 \]
 
-Status akhir sistem adalah normal, pompa OFF, dan alarm OFF.
+Status akhir sistem adalah hampir penuh, pompa OFF, dan alarm OFF.
 
-\subsection{Pengujian Simulasi Real-Time Terbatas}
+\subsection{Pengujian Status Sistem}
 
-Pada mode simulasi real-time terbatas, program menghasilkan data level air secara acak setiap satu detik. Mode ini mensimulasikan pembacaan sensor secara berkala seperti pada sistem instrumentasi nyata.
+Berikut adalah pengujian status sistem berdasarkan rentang level air:
+
+\begin{center}
+\begin{tabular}{|c|c|c|c|}
+\hline
+\textbf{Input Level} & \textbf{Level Terkalibrasi} & \textbf{Status} & \textbf{Output Kontrol} \\
+\hline
+10\% & 11\% & Air Rendah & Pompa ON, Alarm OFF \\
+\hline
+50\% & 51\% & Normal & Pompa OFF, Alarm OFF \\
+\hline
+90\% & 91\% & Hampir Penuh & Pompa OFF, Alarm OFF \\
+\hline
+98\% & 99\% & Overflow Warning & Pompa OFF, Alarm ON \\
+\hline
+\end{tabular}
+\end{center}
+
+\subsection{Pengujian Validasi Input}
+
+Program juga diuji dengan input di luar rentang 0 sampai 100 persen. Jika user memasukkan nilai kurang dari 0 atau lebih dari 100, program akan menampilkan pesan error dan data tersebut tidak dimasukkan ke dalam perhitungan moving average.
+
+Contoh input tidak valid:
+
+\begin{lstlisting}
+Masukkan level air tandon:
+120
+
+Error: level air harus berada pada rentang 0 sampai 100 persen.
+\end{lstlisting}
 
 \subsection{Screenshot Hasil Program}
 
@@ -289,18 +361,22 @@ Screenshot hasil program ditunjukkan pada Gambar \ref{fig:screenshot1} dan Gamba
 
 \section{Analisis Hasil}
 
-Berdasarkan hasil pengujian, program dapat membaca input level air, melakukan validasi, kalibrasi sensor, dan perhitungan moving average. Program juga mampu menentukan status tandon berdasarkan rentang level air yang telah ditentukan.
+Berdasarkan hasil pengujian, program dapat membaca input level air secara berulang, melakukan validasi, kalibrasi sensor, dan perhitungan sliding moving average 3 data terakhir. Program juga mampu menentukan status tandon berdasarkan rentang level air yang telah ditentukan.
 
 Ketika moving average berada pada rentang 0--20\%, status sistem adalah air rendah dan pompa menyala. Ketika moving average berada pada rentang 21--80\%, status sistem adalah normal dan pompa mati. Ketika moving average berada pada rentang 81--95\%, sistem menunjukkan kondisi hampir penuh. Ketika moving average lebih dari 95\%, sistem memberikan peringatan overflow dan alarm menyala.
 
-Mode simulasi real-time terbatas membuat program terlihat lebih mendekati sistem monitoring nyata karena data sensor muncul secara berkala. Namun, data yang digunakan masih berupa data acak, sehingga belum berasal dari sensor fisik secara langsung.
+Penggunaan sliding moving average 3 data terakhir membuat sistem tidak hanya bergantung pada satu data sensor, tetapi mempertimbangkan beberapa data terbaru. Hal ini membuat hasil monitoring menjadi lebih stabil terhadap noise sensor, tetapi tetap responsif terhadap perubahan level air.
+
+Validasi input juga berfungsi untuk memastikan data yang diproses berada pada rentang yang sesuai, yaitu 0 sampai 100 persen. Jika user memasukkan data di luar rentang tersebut, program akan menampilkan pesan error dan tidak memasukkan data tersebut ke dalam perhitungan.
+
+Dengan sistem input berulang, program menjadi lebih menyerupai proses monitoring karena data dapat dimasukkan secara terus-menerus sampai user menghentikan program.
 
 \section{Kesimpulan}
 
-Project ini berhasil membuat aplikasi terminal berbasis Rust untuk monitoring level air tandon gedung. Program mampu membaca data level air, melakukan validasi input, melakukan kalibrasi sederhana, menghitung moving average, menentukan status tandon, serta mengontrol pompa dan alarm secara otomatis.
+Project ini berhasil membuat aplikasi terminal berbasis Rust untuk monitoring level air tandon gedung. Program mampu membaca data level air secara berulang, melakukan validasi input, melakukan kalibrasi sederhana, menghitung sliding moving average 3 data terakhir, menentukan status tandon, serta mengontrol pompa dan alarm secara otomatis.
 
-Konsep OOP berhasil diterapkan menggunakan \texttt{struct} dan \texttt{impl}, yaitu melalui objek \texttt{Sensor}, \texttt{Controller}, dan \texttt{MonitoringSystem}. Komputasi numerik berhasil diterapkan melalui metode moving average.
+Konsep OOP berhasil diterapkan menggunakan \texttt{struct} dan \texttt{impl}, yaitu melalui objek \texttt{Sensor}, \texttt{Controller}, dan \texttt{MonitoringSystem}. Komputasi numerik berhasil diterapkan melalui metode sliding moving average dengan window 3 data terakhir.
 
-Dengan adanya mode input manual dan mode simulasi real-time terbatas, program dapat digunakan untuk demonstrasi sistem monitoring level air secara lebih realistis.
+Dengan adanya visualisasi level air dalam terminal dan sistem input berulang sampai user menghentikan program, aplikasi ini dapat digunakan sebagai simulasi sederhana sistem monitoring level air tandon gedung.
 
 \end{document}

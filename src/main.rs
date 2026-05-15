@@ -1,280 +1,118 @@
-use rand::Rng;
-use std::io;
-use std::thread;
-use std::time::Duration;
+use std::io::{self, Write};
 
 struct Sensor {
-    name: String,
-    value: f32,
-    offset: f32,
+    nama: String,
+    nilai_raw: f32,
+    nilai_kal: f32,
+    error: bool,
+    buffer: Vec<f32>,
 }
 
 impl Sensor {
-    fn new(name: String, offset: f32) -> Sensor {
-        Sensor {
-            name,
-            value: 0.0,
-            offset,
+    fn baru(nama: &str) -> Self {
+        Sensor { nama: nama.to_string(), nilai_raw: 0.0, nilai_kal: 0.0, error: false, buffer: Vec::new() }
+    }
+    fn set_nilai(&mut self, v: f32) {
+        if v < 0.0 || v > 100.0 { self.error = true; return; }
+        self.error = false; self.nilai_raw = v;
+        self.nilai_kal = ((v * 1.02) + (-1.0)).clamp(0.0, 100.0);
+    }
+    fn moving_average(&mut self) -> f32 {
+        self.buffer.push(self.nilai_kal);
+        if self.buffer.len() > 3 { self.buffer.remove(0); }
+        let buf: Vec<String> = self.buffer.iter().map(|x| format!("{:.2}", x)).collect();
+        println!("  Buffer MA : {:?}", buf);
+        self.buffer.iter().sum::<f32>() / self.buffer.len() as f32
+    }
+    fn status(ma: f32) -> &'static str {
+        match ma as u32 {
+            0..=9   => "KRITIS   - Tandon hampir kosong!",
+            10..=29 => "RENDAH   - Segera isi tandon",
+            30..=79 => "NORMAL   - Level aman",
+            80..=89 => "TINGGI   - Mendekati penuh",
+            _       => "OVERFLOW - Tandon penuh!",
         }
-    }
-
-    fn read_value(&mut self, input: f32) {
-        self.value = input;
-    }
-
-    fn calibrated_value(&self) -> f32 {
-        self.value + self.offset
     }
 }
 
 struct Controller {
-    pump: bool,
-    alarm: bool,
+    batas_bawah: f32,
+    batas_atas: f32,
+    pompa: bool,
 }
 
 impl Controller {
-    fn new() -> Controller {
-        Controller {
-            pump: false,
-            alarm: false,
-        }
-    }
-
-    fn control(&mut self, level: f32) {
-        if level <= 20.0 {
-            self.pump = true;
-            self.alarm = false;
-        } else if level > 95.0 {
-            self.pump = false;
-            self.alarm = true;
-        } else {
-            self.pump = false;
-            self.alarm = false;
-        }
-    }
-
-    fn pump_status(&self) -> &str {
-        if self.pump {
-            "ON"
-        } else {
-            "OFF"
-        }
-    }
-
-    fn alarm_status(&self) -> &str {
-        if self.alarm {
-            "ON"
-        } else {
-            "OFF"
-        }
+    fn baru() -> Self { Controller { batas_bawah: 30.0, batas_atas: 80.0, pompa: false } }
+    fn update(&mut self, ma: f32) {
+        if ma < self.batas_bawah { self.pompa = true; }
+        else if ma >= self.batas_atas { self.pompa = false; }
     }
 }
 
 struct MonitoringSystem {
-    sensor: Sensor,
-    controller: Controller,
-    data: Vec<f32>,
+    siklus: u32,
+    histori: Vec<String>,
 }
 
 impl MonitoringSystem {
-    fn new(sensor: Sensor, controller: Controller) -> MonitoringSystem {
-        MonitoringSystem {
-            sensor,
-            controller,
-            data: Vec::new(),
-        }
+    fn baru() -> Self { MonitoringSystem { siklus: 0, histori: Vec::new() } }
+    fn catat(&mut self, s: &Sensor, ma: f32, pompa: bool) {
+        self.siklus += 1;
+        self.histori.push(format!(
+            "Siklus {:02} | Raw:{:.2}% | Kal:{:.2}% | MA:{:.2}% | {} | Pompa:{}",
+            self.siklus, s.nilai_raw, s.nilai_kal, ma,
+            Sensor::status(ma), if pompa { "NYALA" } else { "MATI" }
+        ));
     }
-
-    fn add_data(&mut self, level: f32) {
-        self.sensor.read_value(level);
-        let calibrated = self.sensor.calibrated_value();
-
-        let final_value = if calibrated > 100.0 {
-            100.0
-        } else if calibrated < 0.0 {
-            0.0
-        } else {
-            calibrated
-        };
-
-        self.data.push(final_value);
+    fn tampilkan(&self, s: &Sensor, c: &Controller, ma: f32) {
+        println!("\n╔══════════════════════════════════════════╗");
+        println!("║   MONITORING LEVEL AIR TANDON GEDUNG    ║");
+        println!("╠══════════════════════════════════════════╣");
+        println!("  Siklus    : {}      |  Sensor : {}", self.siklus, s.nama);
+        println!("  Raw       : {:.2}%  |  Kalibrasi    : {:.2}%", s.nilai_raw, s.nilai_kal);
+        println!("  MA        : {:.2}%  |  Kondisi      : {}", ma, Sensor::status(ma));
+        println!("  Pompa     : {}  (ON<{:.0}% | OFF>={:.0}%)",
+            if c.pompa { "NYALA" } else { "MATI  " }, c.batas_bawah, c.batas_atas);
+        println!("╚══════════════════════════════════════════╝");
     }
-
-    fn moving_average(&self) -> f32 {
-        let sum: f32 = self.data.iter().sum();
-        sum / self.data.len() as f32
-    }
-
-    fn data_count(&self) -> usize {
-        self.data.len()
-    }
-}
-
-fn get_status(level: f32) -> &'static str {
-    if level <= 20.0 {
-        "AIR RENDAH"
-    } else if level <= 80.0 {
-        "NORMAL"
-    } else if level <= 95.0 {
-        "HAMPIR PENUH"
-    } else {
-        "OVERFLOW WARNING"
-    }
-}
-
-fn display_tank(level: f32) -> String {
-    let total_bars = 20;
-    let filled_bars = ((level / 100.0) * total_bars as f32).round() as usize;
-    let empty_bars = total_bars - filled_bars;
-
-    let filled = "#".repeat(filled_bars);
-    let empty = "-".repeat(empty_bars);
-
-    format!("[{}{}] {:.2}%", filled, empty, level)
-}
-
-fn display_dashboard(system: &MonitoringSystem, calibrated: f32, average: f32) {
-    println!("========================================");
-    println!(" DASHBOARD MONITORING LEVEL AIR TANDON ");
-    println!("========================================");
-    println!("Sensor              : {}", system.sensor.name);
-    println!("Level Aktual        : {:.2}%", system.sensor.value);
-    println!("Level Terkalibrasi  : {:.2}%", calibrated);
-    println!("Moving Average      : {:.2}%", average);
-    println!("Status Tandon       : {}", get_status(average));
-    println!("Visual Tandon       : {}", display_tank(average));
-    println!("Pompa               : {}", system.controller.pump_status());
-    println!("Alarm               : {}", system.controller.alarm_status());
-    println!("========================================");
-}
-
-fn display_summary(system: &mut MonitoringSystem) {
-    if system.data_count() > 0 {
-        let final_average = system.moving_average();
-        system.controller.control(final_average);
-
-        println!("\n========================================");
-        println!(" RINGKASAN AKHIR MONITORING ");
-        println!("========================================");
-        println!("Jumlah Data Valid   : {}", system.data_count());
-        println!("Rata-rata Level Air : {:.2}%", final_average);
-        println!("Status Akhir        : {}", get_status(final_average));
-        println!("Visual Tandon       : {}", display_tank(final_average));
-        println!("Pompa Akhir         : {}", system.controller.pump_status());
-        println!("Alarm Akhir         : {}", system.controller.alarm_status());
-        println!("========================================");
-    } else {
-        println!("Tidak ada data valid yang diproses.");
-    }
-}
-
-fn input_manual(system: &mut MonitoringSystem) {
-    println!("Masukkan jumlah data pembacaan sensor:");
-
-    let mut jumlah_input = String::new();
-
-    io::stdin()
-        .read_line(&mut jumlah_input)
-        .expect("Gagal membaca input");
-
-    let jumlah_data: usize = jumlah_input
-        .trim()
-        .parse()
-        .expect("Input jumlah data harus berupa angka");
-
-    for i in 1..=jumlah_data {
-        println!("\nMasukkan level air tandon ke-{} dalam persen 0-100:", i);
-
-        let mut input = String::new();
-
-        io::stdin()
-            .read_line(&mut input)
-            .expect("Gagal membaca input");
-
-        let level: f32 = input
-            .trim()
-            .parse()
-            .expect("Input harus berupa angka");
-
-        if level < 0.0 || level > 100.0 {
-            println!("Error: level air harus berada pada rentang 0 sampai 100 persen.");
-            continue;
-        }
-
-        system.add_data(level);
-
-        let calibrated = system.sensor.calibrated_value();
-        let average = system.moving_average();
-
-        system.controller.control(average);
-        display_dashboard(system, calibrated, average);
-    }
-}
-
-fn simulasi_realtime(system: &mut MonitoringSystem) {
-    println!("Masukkan jumlah simulasi pembacaan sensor:");
-
-    let mut jumlah_input = String::new();
-
-    io::stdin()
-        .read_line(&mut jumlah_input)
-        .expect("Gagal membaca input");
-
-    let jumlah_data: usize = jumlah_input
-        .trim()
-        .parse()
-        .expect("Input jumlah data harus berupa angka");
-
-    let mut rng = rand::thread_rng();
-
-    println!("\nSimulasi real-time dimulai...");
-    println!("Data sensor akan dibuat otomatis setiap 1 detik.\n");
-
-    for i in 1..=jumlah_data {
-        let simulated_level: f32 = rng.gen_range(0.0..=100.0);
-
-        println!("\nPembacaan sensor ke-{}", i);
-        println!("Data random sensor  : {:.2}%", simulated_level);
-
-        system.add_data(simulated_level);
-
-        let calibrated = system.sensor.calibrated_value();
-        let average = system.moving_average();
-
-        system.controller.control(average);
-        display_dashboard(system, calibrated, average);
-
-        thread::sleep(Duration::from_secs(1));
+    fn histori(&self) {
+        println!("\n===== HISTORI =====");
+        for h in &self.histori { println!("  {}", h); }
+        println!("===================");
     }
 }
 
 fn main() {
-    let sensor = Sensor::new(String::from("Ultrasonic Level Sensor"), 1.0);
-    let controller = Controller::new();
-    let mut system = MonitoringSystem::new(sensor, controller);
+    println!("╔══════════════════════════════════════════╗");
+    println!("║   SISTEM MONITORING LEVEL AIR TANDON     ║");
+    println!("╚══════════════════════════════════════════╝");
 
-    println!("========================================");
-    println!(" SISTEM MONITORING LEVEL AIR TANDON ");
-    println!("========================================");
-    println!("Pilih mode program:");
-    println!("1. Input manual");
-    println!("2. Simulasi real-time random");
-    println!("Masukkan pilihan:");
+    let mut sensor  = Sensor::baru("Sensor Ultrasonik");
+    let mut control = Controller::baru();
+    let mut monitor = MonitoringSystem::baru();
 
-    let mut pilihan = String::new();
-
-    io::stdin()
-        .read_line(&mut pilihan)
-        .expect("Gagal membaca input");
-
-    match pilihan.trim() {
-        "1" => input_manual(&mut system),
-        "2" => simulasi_realtime(&mut system),
-        _ => {
-            println!("Pilihan tidak valid.");
-            return;
+    loop {
+        print!("\nMasukkan level (0-100), 'h' histori, 'q' keluar: ");
+        io::stdout().flush().unwrap();
+        let mut input = String::new();
+        io::stdin().read_line(&mut input).unwrap();
+        let input = input.trim();
+        match input {
+            "q" | "Q" => { monitor.histori(); println!("Program dihentikan."); break; }
+            "h" | "H" => monitor.histori(),
+            _ => match input.parse::<f32>() {
+                Ok(v) => {
+                    sensor.set_nilai(v);
+                    if sensor.error { println!("ERROR: Nilai harus antara 0 sampai 100!"); }
+                    else {
+                        let ma = sensor.moving_average();
+                        control.update(ma);
+                        monitor.catat(&sensor, ma, control.pompa);
+                        monitor.tampilkan(&sensor, &control, ma);
+                    }
+                }
+                Err(_) => println!("Input tidak valid.")
+            }
         }
     }
-
-    display_summary(&mut system);
 }
